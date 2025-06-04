@@ -7,7 +7,9 @@ import (
 
 // Config holds application configuration loaded from file.
 type Config struct {
-	DatabaseURL string `json:"database_url"`
+	DatabaseURL   string `json:"database_url"`
+	AdminUsername string `json:"admin_username"`
+	AdminPassword string `json:"admin_password"`
 }
 
 // Load reads the configuration from the given path.

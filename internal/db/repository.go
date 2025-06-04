@@ -75,3 +75,28 @@ func (r *Repository) Get(ctx context.Context, id string) (*TrackingInfo, error) 
 	}
 	return &info, nil
 }
+
+// List returns all tracking records ordered by creation time descending.
+func (r *Repository) List(ctx context.Context) ([]*TrackingInfo, error) {
+	query := `SELECT id, email, campaign, utm_source, utm_medium, clicked, created_at, clicked_at
+               FROM trackings ORDER BY created_at DESC`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var infos []*TrackingInfo
+	for rows.Next() {
+		var info TrackingInfo
+		if err := rows.Scan(&info.ID, &info.Email, &info.Campaign, &info.UTMSource,
+			&info.UTMMedium, &info.Clicked, &info.CreatedAt, &info.ClickedAt); err != nil {
+			return nil, err
+		}
+		infos = append(infos, &info)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return infos, nil
+}

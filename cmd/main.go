@@ -12,6 +12,19 @@ import (
 	"ai-recruit/internal/db"
 )
 
+// basicAuth wraps an HTTP handler with Basic Authentication using provided credentials.
+func basicAuth(h http.Handler, user, pass string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != user || p != pass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 type TrackingInfo = db.TrackingInfo
 
 func main() {
@@ -34,6 +47,23 @@ func main() {
 		log.Fatalf("connect db: %v", err)
 	}
 	defer repo.Close()
+
+	adminUser := cfg.AdminUsername
+	adminPass := cfg.AdminPassword
+
+	http.Handle("/admin/api/trackings", basicAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		infos, err := repo.List(r.Context())
+		if err != nil {
+			log.Printf("list trackings: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(infos)
+	}), adminUser, adminPass))
+
+	fs := http.FileServer(http.Dir("admin"))
+	http.Handle("/admin/", basicAuth(http.StripPrefix("/admin/", fs), adminUser, adminPass))
 
 	http.HandleFunc("/generate", func(w http.ResponseWriter, r *http.Request) {
 		email := r.URL.Query().Get("email")

@@ -43,5 +43,7 @@ Users visiting the generated link hit `/track` with the unique ID. The service m
 
 ## Disclaimer
 
-This example does not include authentication or other security features. Use it
-as a starting point for your own tracking service.
+This example now includes a very small admin interface protected with HTTP
+Basic authentication. The credentials are configured in `config.json` as
+`admin_username` and `admin_password` (defaults are `admin`/`1234`). The API
+endpoints used for generating and tracking links remain publicly accessible.
