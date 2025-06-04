@@ -4,7 +4,26 @@ This is a minimal Go service that generates tracking links with UTM parameters a
 
 ## Usage
 
-Run the server:
+Run the server with a Postgres database available. Configure the connection
+string in `config.json`. By default this repository includes a configuration
+that points to a local instance:
+
+```json
+{
+  "database_url": "postgres://user:pass@localhost:5432/dbname"
+}
+```
+
+If you want to provide a custom configuration file, set the `CONFIG_PATH`
+environment variable to its location.
+
+Run the migration:
+
+```bash
+psql "postgres://user:pass@localhost:5432/dbname" -f migrations/0001_create_trackings.sql
+```
+
+Then start the server:
 
 ```bash
 go run ./cmd
@@ -24,4 +43,5 @@ Users visiting the generated link hit `/track` with the unique ID. The service m
 
 ## Disclaimer
 
-This is a simple example using an in-memory store. Data will be lost when the application stops.
+This example does not include authentication or other security features. Use it
+as a starting point for your own tracking service.
