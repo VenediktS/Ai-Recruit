@@ -5,64 +5,36 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"sync"
+	"os"
 	"time"
+
+	"ai-recruit/internal/config"
+	"ai-recruit/internal/db"
 )
 
-type TrackingInfo struct {
-	Email     string    `json:"email"`
-	Campaign  string    `json:"campaign"`
-	UTMSource string    `json:"utm_source"`
-	UTMMedium string    `json:"utm_medium"`
-	Clicked   bool      `json:"clicked"`
-	CreatedAt time.Time `json:"created_at"`
-	ClickedAt time.Time `json:"clicked_at"`
-}
-
-type Store struct {
-	mu    sync.RWMutex
-	items map[string]*TrackingInfo
-}
-
-func NewStore() *Store {
-	return &Store{items: make(map[string]*TrackingInfo)}
-}
-
-func (s *Store) Create(info *TrackingInfo) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	id := generateID()
-	s.items[id] = info
-	return id
-}
-
-func (s *Store) MarkClicked(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if item, ok := s.items[id]; ok {
-		item.Clicked = true
-		item.ClickedAt = time.Now()
-	}
-}
-
-func (s *Store) Get(id string) (*TrackingInfo, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	info, ok := s.items[id]
-	return info, ok
-}
-func generateID() string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
+type TrackingInfo = db.TrackingInfo
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	store := NewStore()
+
+	cfgPath := os.Getenv("CONFIG_PATH")
+	if cfgPath == "" {
+		cfgPath = "config.json"
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	if cfg.DatabaseURL == "" {
+		log.Fatal("database_url not set in config")
+	}
+
+	repo, err := db.NewRepository(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("connect db: %v", err)
+	}
+	defer repo.Close()
+
 	http.HandleFunc("/generate", func(w http.ResponseWriter, r *http.Request) {
 		email := r.URL.Query().Get("email")
 		campaign := r.URL.Query().Get("campaign")
@@ -77,7 +49,12 @@ func main() {
 			UTMMedium: "newsletter",
 			CreatedAt: time.Now(),
 		}
-		id := store.Create(info)
+		id, err := repo.Create(r.Context(), info)
+		if err != nil {
+			log.Printf("create track: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		url := "https://example.com/welcome?utm_source=" + info.UTMSource + "&utm_medium=" + info.UTMMedium + "&utm_campaign=" + campaign + "&uid=" + id
 		resp := map[string]string{"url": url}
 		w.Header().Set("Content-Type", "application/json")
@@ -90,7 +67,9 @@ func main() {
 			http.Error(w, "missing uid", http.StatusBadRequest)
 			return
 		}
-		store.MarkClicked(id)
+		if err := repo.MarkClicked(r.Context(), id); err != nil {
+			log.Printf("mark clicked: %v", err)
+		}
 		http.Redirect(w, r, "https://example.com/", http.StatusSeeOther)
 	})
 
